@@ -75,6 +75,9 @@ def main():
         # Handle duplicates by keeping the first occurrence
         all_data = all_data.drop_duplicates(subset=["Component", "Date"], keep="first")
 
+        # Replace NaN values with None (which becomes null in JSON)
+        all_data = all_data.where(pd.notnull(all_data), None)
+
         # Pivot the DataFrame to match the structure of Book1.xlsx
         try:
             pivot_df = all_data.pivot(index="Component", columns="Date", values="Value")
