@@ -1,71 +1,106 @@
-import streamlit as st
+import fitz  # PyMuPDF for text extraction
 import pandas as pd
-import pytesseract
-from pdf2image import convert_from_bytes
-import re
-import os
+import streamlit as st
 from datetime import datetime
+import tempfile
+import os
 
-# Set Tesseract Path if needed (Update path accordingly)
-# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# Function to extract text from PDF
+def extract_text_from_pdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
 
-# Function to extract date from the image
-def extract_date(text):
-    date_pattern = r"(\d{1,2}/\d{1,2}/\d{4})"  # Adjust pattern based on actual format
-    match = re.search(date_pattern, text)
-    return match.group(1) if match else "Unknown Date"
-
-# Function to extract required data from OCR text
-def extract_table_data(text):
-    rows = text.split("\n")
-    required_keywords = [
-        "Ex-refinery", "IFEM", "Distributor (OMC) Margin", 
-        "Dealer Commisson", "Petroleum levy", "Sales Tax"
-    ]
+# Function to parse the extracted text and extract required data
+def parse_text_to_data(text):
+    data = {}
     
-    fuel_types = ["MOGAS", "E-10 Gasoline"]
+    # Extract date (assuming the date is in the text)
+    date_line = [line for line in text.split("\n") if "Islamabad, the" in line]
+    if date_line:
+        date_str = date_line[0].split("Islamabad, the")[-1].strip()
+        data["Date"] = datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
     
-    extracted_data = []
-    for row in rows:
-        if any(keyword in row for keyword in required_keywords) or any(ft in row for ft in fuel_types):
-            extracted_data.append(row)
-    
-    return extracted_data
+    # Extract table data (this is a simplified example, adjust based on your PDF structure)
+    lines = text.split("\n")
+    for i, line in enumerate(lines):
+        if "E-10 Gasoline" in line:
+            # Assuming the next lines contain the data
+            data["Ex-refinery"] = float(lines[i + 1].split()[0])
+            data["IFEM"] = float(lines[i + 1].split()[2])
+            data["Distributor (OMC) Margin"] = float(lines[i + 1].split()[4])
+            data["Dealer Commission"] = float(lines[i + 1].split()[5])
+            data["Petroleum levy"] = float(lines[i + 1].split()[6])
+            data["Sales Tax"] = float(lines[i + 1].split()[7])
+            data["MOGAS Retail"] = float(lines[i + 1].split()[8])
+            data["E-10 Gasoline Retail"] = float(lines[i + 1].split()[9])
+            data["E-10 Gasoline Direct"] = float(lines[i + 1].split()[10])
+            break
+    return data
 
-# Streamlit UI
-st.title("📄 Extract Fuel Pricing Data from Scanned PDFs")
-uploaded_files = st.file_uploader("Upload PDF files", type=["pdf"], accept_multiple_files=True)
+# Streamlit app
+def main():
+    st.title("E-10 Gasoline Price Data Extractor")
 
-if uploaded_files:
-    extracted_data_list = []
-    
-    for file in uploaded_files:
-        images = convert_from_bytes(file.read())  # Convert PDF to images
-        full_text = ""
+    # Upload PDF files
+    uploaded_files = st.file_uploader("Upload PDF files", type="pdf", accept_multiple_files=True)
 
-        for image in images:
-            text = pytesseract.image_to_string(image)  # OCR extraction
-            full_text += text + "\n"
+    if uploaded_files:
+        data_list = []
+        for uploaded_file in uploaded_files:
+            # Save the uploaded file to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                tmp_file.write(uploaded_file.getvalue())
+                tmp_file_path = tmp_file.name
 
-        extracted_date = extract_date(full_text)
-        extracted_data = extract_table_data(full_text)
+            try:
+                # Extract text from the PDF
+                text = extract_text_from_pdf(tmp_file_path)
+                
+                # Parse the text to extract data
+                data = parse_text_to_data(text)
+                
+                # Append the data to the list
+                if data:
+                    data_list.append(data)
+            finally:
+                # Clean up the temporary file
+                os.unlink(tmp_file_path)
+        
+        # Convert the list of dictionaries to a DataFrame
+        if data_list:
+            df = pd.DataFrame(data_list)
+            
+            # Display the DataFrame
+            st.write("### Extracted Data")
+            st.dataframe(df)
+            
+            # Optionally, display the data in a table format
+            st.write("### Data in Table Format")
+            st.table(df)
 
-        for row in extracted_data:
-            extracted_data_list.append({"Date": extracted_date, "Data": row})
+            # Export data to Excel
+            excel_file = "extracted_data.xlsx"
+            df.to_excel(excel_file, index=False)
+            
+            # Provide a download link for the Excel file
+            st.write("### Download Extracted Data")
+            with open(excel_file, "rb") as file:
+                st.download_button(
+                    label="Download Excel File",
+                    data=file,
+                    file_name=excel_file,
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+        else:
+            st.warning("No data extracted from the uploaded PDFs.")
+    else:
+        st.info("Please upload PDF files to extract data.")
 
-    # Convert to DataFrame and sort by Date
-    df = pd.DataFrame(extracted_data_list)
-    df["Date"] = pd.to_datetime(df["Date"], errors='coerce')
-    df = df.dropna().sort_values(by="Date")
-
-    # Display the extracted data
-    st.write("### Extracted Data")
-    st.dataframe(df)
-
-    # Save to Excel
-    excel_filename = "fuel_pricing_data.xlsx"
-    df.to_excel(excel_filename, index=False)
-
+if __name__ == "__main__":
+    main()
     # Provide download link
     with open(excel_filename, "rb") as f:
         st.download_button("📥 Download Excel File", f, file_name=excel_filename)
