@@ -2,6 +2,7 @@ import streamlit as st
 import pdfplumber
 import pandas as pd
 import os
+from openpyxl import Workbook
 
 # Function to extract data from a single PDF
 def extract_data_from_pdf(pdf_path):
@@ -15,15 +16,8 @@ def extract_data_from_pdf(pdf_path):
 
     # Initialize variables to store the data
     data = {
-        "Ex-refinery": None,
-        "IFEM": None,
-        "Distributor (OMC) Margin": None,
-        "Dealer Commission": None,
-        "Petroleum Levy": None,
-        "Sales Tax": None,
-        "MOGAS Retail": None,
-        "E-10 Gasoline Retail": None,
-        "E-10 Gasoline Direct": None,
+        "Component": ["Ex-refinery", "IFEM", "Distributor (OMC) Margin", "Dealer Commission", "Petroleum Levy", "Sales Tax"],
+        "Value": [None] * 6,
         "Date": None
     }
 
@@ -36,23 +30,17 @@ def extract_data_from_pdf(pdf_path):
     # Extract the required rows
     for i, line in enumerate(lines):
         if "Ex-refinery" in line:
-            data["Ex-refinery"] = lines[i+1].strip()
+            data["Value"][0] = float(lines[i+1].strip().split()[0])
         elif "IFEM" in line:
-            data["IFEM"] = lines[i+1].strip()
+            data["Value"][1] = float(lines[i+1].strip().split()[0])
         elif "Distributor (OMC) Margin" in line:
-            data["Distributor (OMC) Margin"] = lines[i+1].strip()
+            data["Value"][2] = float(lines[i+1].strip().split()[0])
         elif "Dealer Commission" in line:
-            data["Dealer Commission"] = lines[i+1].strip()
+            data["Value"][3] = float(lines[i+1].strip().split()[0])
         elif "Petroleum Levy" in line:
-            data["Petroleum Levy"] = lines[i+1].strip()
+            data["Value"][4] = float(lines[i+1].strip().split()[0])
         elif "Sales Tax" in line:
-            data["Sales Tax"] = lines[i+1].strip()
-        elif "MOGAS Retail" in line:
-            data["MOGAS Retail"] = lines[i+1].strip()
-        elif "E-10 Gasoline Retail" in line:
-            data["E-10 Gasoline Retail"] = lines[i+1].strip()
-        elif "E-10 Gasoline Direct" in line:
-            data["E-10 Gasoline Direct"] = lines[i+1].strip()
+            data["Value"][5] = float(lines[i+1].strip().split()[0])
 
     return data
 
@@ -67,8 +55,10 @@ def main():
     if uploaded_files:
         st.write(f"Uploaded {len(uploaded_files)} files.")
 
+        # Initialize a DataFrame to store all data
+        all_data = pd.DataFrame(columns=["Component", "Value", "Date"])
+
         # Extract data from each PDF
-        data_list = []
         for uploaded_file in uploaded_files:
             # Save the uploaded file temporarily
             with open(uploaded_file.name, "wb") as f:
@@ -76,26 +66,30 @@ def main():
 
             # Extract data
             data = extract_data_from_pdf(uploaded_file.name)
-            data_list.append(data)
+            temp_df = pd.DataFrame(data)
+            all_data = pd.concat([all_data, temp_df], ignore_index=True)
 
             # Remove the temporary file
             os.remove(uploaded_file.name)
 
-        # Convert the list of dictionaries to a DataFrame
-        df = pd.DataFrame(data_list)
+        # Pivot the DataFrame to match the structure of Book1.xlsx
+        pivot_df = all_data.pivot(index="Component", columns="Date", values="Value")
 
         # Display the extracted data
         st.write("Extracted Data:")
-        st.dataframe(df)
+        st.dataframe(pivot_df)
 
-        # Download the data as a CSV file
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="Download Extracted Data as CSV",
-            data=csv,
-            file_name="extracted_data.csv",
-            mime="text/csv",
-        )
+        # Download the data as an Excel file
+        output_path = "extracted_data.xlsx"
+        pivot_df.to_excel(output_path)
+
+        with open(output_path, "rb") as f:
+            st.download_button(
+                label="Download Extracted Data as Excel",
+                data=f,
+                file_name="extracted_data.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
 # Run the Streamlit app
 if __name__ == "__main__":
