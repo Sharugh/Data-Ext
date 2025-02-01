@@ -72,8 +72,17 @@ def main():
             # Remove the temporary file
             os.remove(uploaded_file.name)
 
+        # Handle duplicates by keeping the first occurrence
+        all_data = all_data.drop_duplicates(subset=["Component", "Date"], keep="first")
+
         # Pivot the DataFrame to match the structure of Book1.xlsx
-        pivot_df = all_data.pivot(index="Component", columns="Date", values="Value")
+        try:
+            pivot_df = all_data.pivot(index="Component", columns="Date", values="Value")
+        except ValueError as e:
+            st.error(f"Error while pivoting data: {e}")
+            st.write("Duplicate entries detected. Please check the data.")
+            st.write(all_data)
+            return
 
         # Display the extracted data
         st.write("Extracted Data:")
