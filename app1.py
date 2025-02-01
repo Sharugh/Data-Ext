@@ -29,18 +29,27 @@ def extract_data_from_pdf(pdf_path):
 
     # Extract the required rows
     for i, line in enumerate(lines):
-        if "Ex-refinery" in line:
-            data["Value"][0] = float(lines[i+1].strip().split()[0])
-        elif "IFEM" in line:
-            data["Value"][1] = float(lines[i+1].strip().split()[0])
-        elif "Distributor (OMC) Margin" in line:
-            data["Value"][2] = float(lines[i+1].strip().split()[0])
-        elif "Dealer Commission" in line:
-            data["Value"][3] = float(lines[i+1].strip().split()[0])
-        elif "Petroleum Levy" in line:
-            data["Value"][4] = float(lines[i+1].strip().split()[0])
-        elif "Sales Tax" in line:
-            data["Value"][5] = float(lines[i+1].strip().split()[0])
+        try:
+            if "Ex-refinery" in line:
+                value = lines[i+1].strip().split()[0]
+                data["Value"][0] = float(value) if value.replace('.', '', 1).isdigit() else None
+            elif "IFEM" in line:
+                value = lines[i+1].strip().split()[0]
+                data["Value"][1] = float(value) if value.replace('.', '', 1).isdigit() else None
+            elif "Distributor (OMC) Margin" in line:
+                value = lines[i+1].strip().split()[0]
+                data["Value"][2] = float(value) if value.replace('.', '', 1).isdigit() else None
+            elif "Dealer Commission" in line:
+                value = lines[i+1].strip().split()[0]
+                data["Value"][3] = float(value) if value.replace('.', '', 1).isdigit() else None
+            elif "Petroleum Levy" in line:
+                value = lines[i+1].strip().split()[0]
+                data["Value"][4] = float(value) if value.replace('.', '', 1).isdigit() else None
+            elif "Sales Tax" in line:
+                value = lines[i+1].strip().split()[0]
+                data["Value"][5] = float(value) if value.replace('.', '', 1).isdigit() else None
+        except (IndexError, ValueError) as e:
+            st.warning(f"Error extracting value for line: {line}. Error: {e}")
 
     return data
 
