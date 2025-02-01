@@ -11,33 +11,44 @@ def extract_text_from_pdf(pdf_path):
     text = ""
     for page in doc:
         text += page.get_text()
+    print("Extracted Text:\n", text)  # Debugging: Print the extracted text
     return text
 
 # Function to parse the extracted text and extract required data
 def parse_text_to_data(text):
     data = {}
     
-    # Extract date (assuming the date is in the text)
+    # Extract date
     date_line = [line for line in text.split("\n") if "Islamabad, the" in line]
     if date_line:
         date_str = date_line[0].split("Islamabad, the")[-1].strip()
-        data["Date"] = datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
+        try:
+            data["Date"] = datetime.strptime(date_str, "%B %d, %Y").strftime("%Y-%m-%d")
+        except ValueError:
+            data["Date"] = "Unknown Date"
     
-    # Extract table data (this is a simplified example, adjust based on your PDF structure)
+    # Extract table data
     lines = text.split("\n")
     for i, line in enumerate(lines):
         if "E-10 Gasoline" in line:
-            # Assuming the next lines contain the data
-            data["Ex-refinery"] = float(lines[i + 1].split()[0])
-            data["IFEM"] = float(lines[i + 1].split()[2])
-            data["Distributor (OMC) Margin"] = float(lines[i + 1].split()[4])
-            data["Dealer Commission"] = float(lines[i + 1].split()[5])
-            data["Petroleum levy"] = float(lines[i + 1].split()[6])
-            data["Sales Tax"] = float(lines[i + 1].split()[7])
-            data["MOGAS Retail"] = float(lines[i + 1].split()[8])
-            data["E-10 Gasoline Retail"] = float(lines[i + 1].split()[9])
-            data["E-10 Gasoline Direct"] = float(lines[i + 1].split()[10])
-            break
+            for j in range(i + 1, min(i + 10, len(lines))):
+                if "Rs / Liter" in lines[j]:  # Header row
+                    if j + 1 < len(lines):
+                        values = lines[j + 1].split()
+                        if len(values) >= 8:
+                            try:
+                                data["Ex-refinery"] = float(values[0])
+                                data["IFEM"] = float(values[2])
+                                data["Distributor (OMC) Margin"] = float(values[4])
+                                data["Dealer Commission"] = float(values[5])
+                                data["Petroleum levy"] = float(values[6])
+                                data["Sales Tax"] = float(values[7])
+                                data["MOGAS Retail"] = float(values[8])
+                                data["E-10 Gasoline Retail"] = float(values[9])
+                                data["E-10 Gasoline Direct"] = float(values[10])
+                            except (IndexError, ValueError) as e:
+                                print(f"Error parsing data: {e}")
+                        break
     return data
 
 # Streamlit app
@@ -77,10 +88,6 @@ def main():
             st.write("### Extracted Data")
             st.dataframe(df)
             
-            # Optionally, display the data in a table format
-            st.write("### Data in Table Format")
-            st.table(df)
-
             # Export data to Excel
             excel_file = "extracted_data.xlsx"
             df.to_excel(excel_file, index=False)
@@ -101,7 +108,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-    # Provide download link
     with open(excel_filename, "rb") as f:
         st.download_button("📥 Download Excel File", f, file_name=excel_filename)
 
