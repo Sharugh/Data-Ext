@@ -1,5 +1,6 @@
 streamlit
-pdf2image
-pytesseract
+pymupdf
 pandas
 openpyxl
+python-dateutil
+pytz
